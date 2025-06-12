@@ -1,6 +1,9 @@
 import sqlite3
 import tkinter as tk
-from tkinter import messagebox
+from tkinter import messagebox, ttk
+import json
+import csv
+import os
 
 def criar_banco():
     conn = sqlite3.connect("estacio.db")
@@ -27,153 +30,156 @@ def criar_banco():
     conn.commit()
     conn.close()
 
-def adicionar_aluno(matricula, nome):
+def executar_query(query, params=()):
     conn = sqlite3.connect("estacio.db")
     cursor = conn.cursor()
-    try:
-        cursor.execute("INSERT INTO alunos (matricula, nome) VALUES (?, ?)", (matricula, nome))
-        conn.commit()
-        return True
-    except sqlite3.IntegrityError:
-        return False
-    finally:
-        conn.close()
-
-def adicionar_disciplina(codigo, nome):
-    conn = sqlite3.connect("estacio.db")
-    cursor = conn.cursor()
-    try:
-        cursor.execute("INSERT INTO disciplinas (codigo, nome) VALUES (?, ?)", (codigo, nome))
-        conn.commit()
-        return True
-    except sqlite3.IntegrityError:
-        return False
-    finally:
-        conn.close()
-
-def adicionar_nota(matricula, codigo, nota):
-    conn = sqlite3.connect("estacio.db")
-    cursor = conn.cursor()
-    cursor.execute("SELECT 1 FROM alunos WHERE matricula = ?", (matricula,))
-    if not cursor.fetchone():
-        conn.close()
-        return "Aluno não encontrado"
-    cursor.execute("SELECT 1 FROM disciplinas WHERE codigo = ?", (codigo,))
-    if not cursor.fetchone():
-        conn.close()
-        return "Disciplina não encontrada"
-    cursor.execute("INSERT INTO notas (matricula, codigo, nota) VALUES (?, ?, ?)", (matricula, codigo, nota))
+    cursor.execute(query, params)
     conn.commit()
     conn.close()
-    return "Sucesso"
 
-def buscar_notas(matricula):
+def listar_query(query):
     conn = sqlite3.connect("estacio.db")
     cursor = conn.cursor()
-    cursor.execute("""
-    SELECT disciplinas.nome, notas.nota FROM notas
-    JOIN disciplinas ON notas.codigo = disciplinas.codigo
-    WHERE notas.matricula = ?
-    """, (matricula,))
-    resultados = cursor.fetchall()
+    cursor.execute(query)
+    dados = cursor.fetchall()
     conn.close()
-    return resultados
+    return dados
 
-class Aplicacao:
-    def __init__(self, root):
-        self.root = root
-        root.title("Estácio")
-        root.geometry("400x500")
-        self.frame = tk.Frame(root, padx=20, pady=20)
-        self.frame.pack()
-        tk.Label(self.frame, text="Cadastro de Aluno").grid(row=0, column=0, columnspan=2, pady=5)
-        tk.Label(self.frame, text="Matrícula:").grid(row=1, column=0, sticky="e")
-        self.matricula_aluno = tk.Entry(self.frame)
-        self.matricula_aluno.grid(row=1, column=1)
-        tk.Label(self.frame, text="Nome:").grid(row=2, column=0, sticky="e")
-        self.nome_aluno = tk.Entry(self.frame)
-        self.nome_aluno.grid(row=2, column=1)
-        tk.Button(self.frame, text="Adicionar Aluno", command=self.adicionar_aluno).grid(row=3, column=0, columnspan=2, pady=5)
-        tk.Label(self.frame, text="Cadastro de Disciplina").grid(row=4, column=0, columnspan=2, pady=5)
-        tk.Label(self.frame, text="Código:").grid(row=5, column=0, sticky="e")
-        self.codigo_disciplina = tk.Entry(self.frame)
-        self.codigo_disciplina.grid(row=5, column=1)
-        tk.Label(self.frame, text="Nome:").grid(row=6, column=0, sticky="e")
-        self.nome_disciplina = tk.Entry(self.frame)
-        self.nome_disciplina.grid(row=6, column=1)
-        tk.Button(self.frame, text="Adicionar Disciplina", command=self.adicionar_disciplina).grid(row=7, column=0, columnspan=2, pady=5)
-        tk.Label(self.frame, text="Adicionar Nota").grid(row=8, column=0, columnspan=2, pady=5)
-        tk.Label(self.frame, text="Matrícula:").grid(row=9, column=0, sticky="e")
-        self.matricula_nota = tk.Entry(self.frame)
-        self.matricula_nota.grid(row=9, column=1)
-        tk.Label(self.frame, text="Código Disciplina:").grid(row=10, column=0, sticky="e")
-        self.codigo_nota = tk.Entry(self.frame)
-        self.codigo_nota.grid(row=10, column=1)
-        tk.Label(self.frame, text="Nota (0-10):").grid(row=11, column=0, sticky="e")
-        self.valor_nota = tk.Entry(self.frame)
-        self.valor_nota.grid(row=11, column=1)
-        tk.Button(self.frame, text="Adicionar Nota", command=self.adicionar_nota).grid(row=12, column=0, columnspan=2, pady=5)
-        tk.Label(self.frame, text="Mostrar Notas do Aluno").grid(row=13, column=0, columnspan=2, pady=5)
-        tk.Label(self.frame, text="Matrícula:").grid(row=14, column=0, sticky="e")
-        self.matricula_busca = tk.Entry(self.frame)
-        self.matricula_busca.grid(row=14, column=1)
-        tk.Button(self.frame, text="Mostrar Notas", command=self.mostrar_notas).grid(row=15, column=0, columnspan=2, pady=5)
+def exportar_dados(formato):
+    conn = sqlite3.connect("estacio.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM alunos")
+    alunos = cursor.fetchall()
+    cursor.execute("SELECT * FROM disciplinas")
+    disciplinas = cursor.fetchall()
+    cursor.execute("SELECT * FROM notas")
+    notas = cursor.fetchall()
+    conn.close()
 
-    def adicionar_aluno(self):
-        try:
-            matricula = int(self.matricula_aluno.get())
-            nome = self.nome_aluno.get().strip()
-            if not nome:
-                raise ValueError
-            sucesso = adicionar_aluno(matricula, nome)
-            if sucesso:
-                messagebox.showinfo("Sucesso", "Aluno cadastrado!")
-            else:
-                messagebox.showerror("Erro", "Matrícula já cadastrada.")
-        except ValueError:
-            messagebox.showerror("Erro", "Dados inválidos.")
+    if formato == "json":
+        dados = {
+            "alunos": alunos,
+            "disciplinas": disciplinas,
+            "notas": notas
+        }
+        with open("dados.json", "w", encoding="utf-8") as f:
+            json.dump(dados, f, ensure_ascii=False, indent=4)
+    elif formato == "csv":
+        with open("alunos.csv", "w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(["matricula", "nome"])
+            writer.writerows(alunos)
+        with open("disciplinas.csv", "w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(["codigo", "nome"])
+            writer.writerows(disciplinas)
+        with open("notas.csv", "w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(["id", "matricula", "codigo", "nota"])
+            writer.writerows(notas)
+    elif formato == "txt":
+        with open("dados.txt", "w", encoding="utf-8") as f:
+            f.write("Alunos:\n")
+            for a in alunos:
+                f.write(str(a) + "\n")
+            f.write("\nDisciplinas:\n")
+            for d in disciplinas:
+                f.write(str(d) + "\n")
+            f.write("\nNotas:\n")
+            for n in notas:
+                f.write(str(n) + "\n")
 
-    def adicionar_disciplina(self):
-        codigo = self.codigo_disciplina.get().strip()
-        nome = self.nome_disciplina.get().strip()
-        if not codigo or not nome:
-            messagebox.showerror("Erro", "Dados inválidos.")
-            return
-        sucesso = adicionar_disciplina(codigo, nome)
-        if sucesso:
-            messagebox.showinfo("Sucesso", "Disciplina cadastrada!")
-        else:
-            messagebox.showerror("Erro", "Código já cadastrado.")
+    caminho = os.path.abspath(".")
+    os.startfile(caminho)
+    messagebox.showinfo("Exportação", f"Dados exportados como {formato.upper()} com sucesso.")
 
-    def adicionar_nota(self):
-        try:
-            matricula = int(self.matricula_nota.get())
-            codigo = self.codigo_nota.get().strip()
-            nota = float(self.valor_nota.get())
-            if nota < 0 or nota > 10:
-                raise ValueError
-            resultado = adicionar_nota(matricula, codigo, nota)
-            if resultado == "Sucesso":
-                messagebox.showinfo("Sucesso", "Nota adicionada!")
-            else:
-                messagebox.showerror("Erro", resultado)
-        except ValueError:
-            messagebox.showerror("Erro", "Dados inválidos.")
+def incluir_dados(tabela, campos, valores):
+    query = f"INSERT INTO {tabela} ({','.join(campos)}) VALUES ({','.join(['?' for _ in valores])})"
+    try:
+        executar_query(query, valores)
+        messagebox.showinfo("Sucesso", f"Dados inseridos na tabela {tabela}.")
+    except sqlite3.IntegrityError:
+        messagebox.showerror("Erro", f"Chave já cadastrada na tabela {tabela}.")
 
-    def mostrar_notas(self):
-        try:
-            matricula = int(self.matricula_busca.get())
-            notas = buscar_notas(matricula)
-            if notas:
-                texto = "\n".join(f"{disc}: {nota}" for disc, nota in notas)
-                messagebox.showinfo("Notas do Aluno", texto)
-            else:
-                messagebox.showinfo("Notas do Aluno", "Nenhuma nota cadastrada.")
-        except ValueError:
-            messagebox.showerror("Erro", "Matrícula inválida.")
+def excluir_dado(tabela, chave, valor):
+    query = f"DELETE FROM {tabela} WHERE {chave} = ?"
+    executar_query(query, (valor,))
+    messagebox.showinfo("Remoção", f"Registro removido da tabela {tabela}.")
+
+def alterar_dado(tabela, campos, valores, chave, chave_valor):
+    sets = ', '.join([f"{campo} = ?" for campo in campos])
+    query = f"UPDATE {tabela} SET {sets} WHERE {chave} = ?"
+    executar_query(query, (*valores, chave_valor))
+    messagebox.showinfo("Atualização", f"Registro da tabela {tabela} atualizado.")
+
+def listar_dados(tabela):
+    dados = listar_query(f"SELECT * FROM {tabela}")
+    return "\n".join(str(d) for d in dados)
+
+def criar_interface():
+    root = tk.Tk()
+    root.title("Sistema Acadêmico")
+    root.geometry("650x550")
+
+    frame = tk.Frame(root, padx=10, pady=10)
+    frame.pack(fill="both", expand=True)
+
+    campos = {
+        "alunos": ["matricula", "nome"],
+        "disciplinas": ["codigo", "nome"],
+        "notas": ["matricula", "codigo", "nota"]
+    }
+
+    def janela_acao(acao):
+        janela = tk.Toplevel()
+        janela.title(f"{acao.title()} Dados")
+        janela.geometry("500x500")
+        aba = ttk.Notebook(janela)
+        aba.pack(expand=True, fill='both')
+
+        for tabela, colunas in campos.items():
+            tab = tk.Frame(aba)
+            aba.add(tab, text=tabela.title())
+            entradas = []
+            for i, campo in enumerate(colunas):
+                tk.Label(tab, text=campo).grid(row=i, column=0)
+                e = tk.Entry(tab)
+                e.grid(row=i, column=1)
+                entradas.append(e)
+
+            if acao == "alterar":
+                novos = []
+                for i, campo in enumerate(colunas):
+                    tk.Label(tab, text=f"Novo {campo}").grid(row=i + len(colunas), column=0)
+                    en = tk.Entry(tab)
+                    en.grid(row=i + len(colunas), column=1)
+                    novos.append(en)
+
+            def acao_local(t=tabela, es=entradas, ns=novos if acao == "alterar" else []):
+                if acao == "incluir":
+                    incluir_dados(t, campos[t], [e.get() for e in es])
+                elif acao == "excluir":
+                    excluir_dado(t, campos[t][0], es[0].get())
+                elif acao == "alterar":
+                    alterar_dado(t, campos[t], [n.get() for n in ns], campos[t][0], es[0].get())
+                elif acao == "listar":
+                    dados = listar_dados(t)
+                    messagebox.showinfo("Listagem", dados if dados else "Nada encontrado.")
+
+            tk.Button(tab, text=acao.title(), command=acao_local).grid(row=30, column=0, columnspan=2, pady=10)
+
+    tk.Button(frame, text="Incluir", command=lambda: janela_acao("incluir"), width=20).pack(pady=5)
+    tk.Button(frame, text="Alterar", command=lambda: janela_acao("alterar"), width=20).pack(pady=5)
+    tk.Button(frame, text="Excluir", command=lambda: janela_acao("excluir"), width=20).pack(pady=5)
+    tk.Button(frame, text="Listar", command=lambda: janela_acao("listar"), width=20).pack(pady=5)
+
+    tk.Label(frame, text="Exportar Dados").pack(pady=10)
+    tk.Button(frame, text="Exportar JSON", command=lambda: exportar_dados("json"), width=20).pack(pady=2)
+    tk.Button(frame, text="Exportar CSV", command=lambda: exportar_dados("csv"), width=20).pack(pady=2)
+    tk.Button(frame, text="Exportar TXT", command=lambda: exportar_dados("txt"), width=20).pack(pady=2)
+
+    root.mainloop()
 
 if __name__ == "__main__":
     criar_banco()
-    root = tk.Tk()
-    app = Aplicacao(root)
-    root.mainloop()
+    criar_interface()
